@@ -2,9 +2,11 @@ node_modules
 .env
 coverage
 coverage.json
-typechain
+typechain-types
+package-lock.json
 desktop.ini
 
 #Hardhat files
 cache
 artifacts
+hardhat.config.ts

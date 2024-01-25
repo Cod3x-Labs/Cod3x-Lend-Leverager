@@ -1,75 +1,102 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity 0.6.12;
 pragma experimental ABIEncoderV2;
 
 import "./lib/SafeMath.sol";
 import "./interfaces/IERC20.sol";
 import "./interfaces/ILendingPool.sol";
+import "./interfaces/ILendingPoolAddressesProvider.sol";
+import "./interfaces/IFlashLoanReceiver.sol";
 
-contract Leverager {
+contract Leverager is IFlashLoanReceiver {
     using SafeMath for uint256;
 
-    uint256 public constant BORROW_RATIO_DECIMALS = 4;
+    ILendingPool public immutable override LENDING_POOL;
+    ILendingPoolAddressesProvider public immutable override ADDRESSES_PROVIDER;
 
-    /// @notice Lending Pool address
-    ILendingPool public lendingPool;
+    uint256 private flashLoanStatus;
+    uint256 private constant NO_FL_IN_PROGRESS = 0;
+    uint256 private constant DEPOSIT_FL_IN_PROGRESS = 1;
 
-    constructor(ILendingPool _lendingPool) public {
-        lendingPool = _lendingPool;
+    constructor(address _lendingPool, address _addressesProvider) public {
+        LENDING_POOL = ILendingPool(_lendingPool);
+        ADDRESSES_PROVIDER = ILendingPoolAddressesProvider(_addressesProvider);
     }
 
-    /**
-     * @dev Returns the configuration of the reserve
-     * @param asset The address of the underlying asset of the reserve
-     * @return The configuration of the reserve
-     **/
-    function getConfiguration(address asset) external view returns (DataTypes.ReserveConfigurationMap memory) {
-        return lendingPool.getConfiguration(asset);
-    }
-
-    /**
-     * @dev Returns variable debt token address of asset
-     * @param asset The address of the underlying asset of the reserve
-     * @return varaiableDebtToken address of the asset
-     **/
-    function getVariableDebtToken(address asset) public view returns (address) {
-        DataTypes.ReserveData memory reserveData = lendingPool.getReserveData(asset);
-        return reserveData.variableDebtTokenAddress;
-    }
-
-    /**
-     * @dev Returns loan to value
-     * @param asset The address of the underlying asset of the reserve
-     * @return ltv of the asset
-     **/
-    function ltv(address asset) public view returns (uint256) {
-        DataTypes.ReserveConfigurationMap memory config =  lendingPool.getConfiguration(asset);
-        return config.data % (2 ** 16);
-    }
-
-    /**
-     * @dev Loop the deposit and borrow of an asset
-     * @param asset for loop
-     * @param amount for the initial deposit
-     * @param borrowRatio Ratio of tokens to borrow
-     * @param loopCount Repeat count for loop
-     **/
     function loop(
         address asset,
-        uint256 amount,
-        uint256 borrowRatio,
-        uint256 loopCount
+        uint256 initialDeposit,
+        uint256 borrowAmount
     ) external {
-        require(address(asset) != address(0), 'INVALID_ADDRESS');
-        uint256 interestRateMode = 2;
-        uint16 referralCode = 0;
-        IERC20(asset).transferFrom(msg.sender, address(this), amount);
-        IERC20(asset).approve(address(lendingPool), type(uint256).max);
-        lendingPool.deposit(asset, amount, msg.sender, referralCode);
-        for (uint256 i = 0; i < loopCount; ++i) {
-            amount = amount.mul(borrowRatio).div(10 ** BORROW_RATIO_DECIMALS);
-            lendingPool.borrow(asset, amount, interestRateMode, referralCode, msg.sender);
-            lendingPool.deposit(asset, amount, msg.sender, referralCode);
-        }
+        require(asset != address(0), 'INVALID_ADDRESS');
+        IERC20(asset).transferFrom(msg.sender, address(this), initialDeposit);
+        IERC20(asset).approve(address(LENDING_POOL), type(uint256).max);
+        LENDING_POOL.deposit(
+            asset,
+            initialDeposit,
+            msg.sender,
+            0
+        );
+        _initFlashLoan(
+            asset,
+            msg.sender,
+            borrowAmount,
+            DEPOSIT_FL_IN_PROGRESS
+        );
+    }
+
+    function executeOperation(
+        address[] calldata assets,
+        uint256[] calldata amounts,
+        uint256[] calldata premiums,
+        address initiator,
+        bytes calldata params
+    ) external override returns (bool) {
+        require(initiator == address(this), "!initiator");
+        require(flashLoanStatus == DEPOSIT_FL_IN_PROGRESS, "invalid flashLoanStatus");
+        flashLoanStatus = NO_FL_IN_PROGRESS;
+
+        address onBehalfOf = abi.decode(params, (address));
+        IERC20(assets[0]).approve(address(LENDING_POOL), amounts[0]);
+        LENDING_POOL.deposit(
+            assets[0],
+            amounts[0],
+            onBehalfOf,
+            0
+        );
+
+        return true;
+    }
+
+    function _initFlashLoan(
+        address asset,
+        address onBehalf,
+        uint256 amount,
+        uint256 newLoanStatus
+    ) internal {
+        require(amount != 0, "FL: invalid amount!");
+
+        // asset to be flashed
+        address[] memory assets = new address[](1);
+        assets[0] = address(asset);
+
+        // amount to be flashed
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = amount;
+
+        // 0 = no debt, 1 = stable, 2 = variable
+        uint256[] memory modes = new uint256[](1);
+        modes[0] = 2;
+
+        flashLoanStatus = newLoanStatus;
+        LENDING_POOL.flashLoan(
+            address(this),
+            assets,
+            amounts,
+            modes,
+            onBehalf,
+            abi.encode(onBehalf),
+            0 // referral code
+        );
     }
 }
