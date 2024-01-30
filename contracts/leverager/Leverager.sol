@@ -1,102 +1,94 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.6.12;
-pragma experimental ABIEncoderV2;
+pragma solidity 0.8.20;
 
-import "./lib/SafeMath.sol";
-import "./interfaces/IERC20.sol";
+import "./interfaces/IOracle.sol";
 import "./interfaces/ILendingPool.sol";
 import "./interfaces/ILendingPoolAddressesProvider.sol";
 import "./interfaces/IFlashLoanReceiver.sol";
+import "./lib/WadRayMath.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract Leverager is IFlashLoanReceiver {
-    using SafeMath for uint256;
+    using SafeERC20 for IERC20;
+    using WadRayMath for uint256;
 
+    IOracle public immutable ORACLE;
     ILendingPool public immutable override LENDING_POOL;
     ILendingPoolAddressesProvider public immutable override ADDRESSES_PROVIDER;
+    uint256 public constant MIN_HF = 1.1e18;
 
-    uint256 private flashLoanStatus;
-    uint256 private constant NO_FL_IN_PROGRESS = 0;
-    uint256 private constant DEPOSIT_FL_IN_PROGRESS = 1;
+    error InvalidInput();
+    error InvalidHealthFactor();
+    error UnauthorizedInitiator();
 
-    constructor(address _lendingPool, address _addressesProvider) public {
-        LENDING_POOL = ILendingPool(_lendingPool);
+    constructor(address _addressesProvider) public {
         ADDRESSES_PROVIDER = ILendingPoolAddressesProvider(_addressesProvider);
+        LENDING_POOL = ILendingPool(ADDRESSES_PROVIDER.getLendingPool());
+        ORACLE = IOracle(ADDRESSES_PROVIDER.getPriceOracle());
     }
 
     function loop(
-        address asset,
-        uint256 initialDeposit,
-        uint256 borrowAmount
+        address _asset,
+        uint256 _initialDeposit,
+        uint256 _borrowAmount,
+        uint256 _minHealthFactor
     ) external {
-        require(asset != address(0), 'INVALID_ADDRESS');
-        IERC20(asset).transferFrom(msg.sender, address(this), initialDeposit);
-        IERC20(asset).approve(address(LENDING_POOL), type(uint256).max);
-        LENDING_POOL.deposit(
-            asset,
-            initialDeposit,
-            msg.sender,
-            0
-        );
-        _initFlashLoan(
-            asset,
-            msg.sender,
-            borrowAmount,
-            DEPOSIT_FL_IN_PROGRESS
+        if (_asset == address(0)) revert InvalidInput();
+        if (_initialDeposit == 0) revert InvalidInput();
+        if (_borrowAmount == 0) revert InvalidInput();
+        if (_minHealthFactor < MIN_HF) revert InvalidHealthFactor();
+
+        address[] memory assets = new address[](1);
+        assets[0] = _asset;
+
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = _borrowAmount;
+
+        uint256[] memory modes = new uint256[](1);
+        modes[0] = 2;
+
+        LENDING_POOL.flashLoan(
+            address(this),
+            assets, // [_asset]
+            amounts,// [_borrowAmount]
+            modes,  // [2]
+            msg.sender, // onBehalfOf
+            abi.encode(msg.sender, _initialDeposit, _minHealthFactor),
+            0 // referral code
         );
     }
 
     function executeOperation(
-        address[] calldata assets,
-        uint256[] calldata amounts,
-        uint256[] calldata premiums,
-        address initiator,
-        bytes calldata params
+        address[] memory _assets,
+        uint256[] memory _amounts,
+        uint256[] calldata ,
+        address _initiator,
+        bytes calldata _params
     ) external override returns (bool) {
-        require(initiator == address(this), "!initiator");
-        require(flashLoanStatus == DEPOSIT_FL_IN_PROGRESS, "invalid flashLoanStatus");
-        flashLoanStatus = NO_FL_IN_PROGRESS;
+        if (_initiator != address(this)) revert UnauthorizedInitiator();
 
-        address onBehalfOf = abi.decode(params, (address));
-        IERC20(assets[0]).approve(address(LENDING_POOL), amounts[0]);
+        (address onBehalfOf, uint256 initialDeposit, uint256 minHealthFactor) = abi.decode(_params, (address, uint256, uint256));
+
+        uint256 amountToDeposit = initialDeposit + _amounts[0];
+        IERC20(_assets[0]).safeTransferFrom(onBehalfOf, address(this), initialDeposit);
+        IERC20(_assets[0]).approve(address(LENDING_POOL), amountToDeposit);
+        
         LENDING_POOL.deposit(
-            assets[0],
-            amounts[0],
+            _assets[0],
+            amountToDeposit,
             onBehalfOf,
             0
         );
 
+        if (getFutureHF(onBehalfOf, _assets[0], _amounts[0]) < minHealthFactor) revert InvalidHealthFactor();
+
         return true;
     }
 
-    function _initFlashLoan(
-        address asset,
-        address onBehalf,
-        uint256 amount,
-        uint256 newLoanStatus
-    ) internal {
-        require(amount != 0, "FL: invalid amount!");
-
-        // asset to be flashed
-        address[] memory assets = new address[](1);
-        assets[0] = address(asset);
-
-        // amount to be flashed
-        uint256[] memory amounts = new uint256[](1);
-        amounts[0] = amount;
-
-        // 0 = no debt, 1 = stable, 2 = variable
-        uint256[] memory modes = new uint256[](1);
-        modes[0] = 2;
-
-        flashLoanStatus = newLoanStatus;
-        LENDING_POOL.flashLoan(
-            address(this),
-            assets,
-            amounts,
-            modes,
-            onBehalf,
-            abi.encode(onBehalf),
-            0 // referral code
-        );
+    function getFutureHF(address _user, address _asset, uint256 _amountBorrowed) public view returns(uint256){
+        (uint256 totalCollateralUSD, uint256 totalDebtUSD,,,,) = LENDING_POOL.getUserAccountData(_user);  
+        uint256 flashLoanDebtUSD = (_amountBorrowed * ORACLE.getAssetPrice(_asset)) / 1e18;
+        return totalCollateralUSD.wadDiv(totalDebtUSD - flashLoanDebtUSD);
     }
 }
