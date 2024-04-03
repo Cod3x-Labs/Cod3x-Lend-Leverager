@@ -1,20 +1,19 @@
 {
-   "LendingPool": {
-      "Fantom": "0x7220FFD5Dc173BA3717E47033a01d870f06E5284",
-      "Optimism": "0x8FD4aF47E4E63d1D2D45582c3286b4BD9Bb95DfE",
-      "Avalanche": "0xB702cE183b4E1Faa574834715E5D4a6378D0eEd3",
-      "Ethereum": "0xB702cE183b4E1Faa574834715E5D4a6378D0eEd3",
-      "Metis": "0x65dEc665ea1e96Ee5203DB321b5Cd413b81B2bd2",
-      "Arbitrum": "0x102442A3BA1e441043154Bc0B8A2e2FB5E0F94A7",
-      "Binance": "0x7171054f8d148Fe1097948923C91A6596fC29032"
-   },
    "Leverager": {
-      "Fantom": "0x674Cc8Ac7fbfc605C1648b2041c7044E6643Fb00",
-      "Optimism": "0xcE1cB5377884ee4Bc2D30Cf1588dE9E352ac7a7d",
-      "Avalanche": "0xc2CDa52C7dC64D4Ff01b58b0981e1Fcdd94b16c2",
-      "Ethereum": "0x204f5ccC7b5217B8477C8FA45708144FB0a61831",
-      "Metis": "0xe12e084FC4550387cB2b252b5F289BA38b755354",
-      "Arbitrum": "0x44998eeE6fe3BfeaD1e6a69cd15208e2ca4a5280",
-      "Binance": "0xa059c031CBAc251FBaBE2eb1B7dEfB80C77C5526"
+      "Granary": {
+         "Optimism": "0x4A7624a74dAAeB3212C3036A55BEAc5e78b6d039",
+         "Arbitrum": "0xf5604a93CaDDb18a4ba8Ee8f3F20324CA286dcAE",
+         "Base": "0xd3eA00cf1592c9D06a62afdE3A2e6b3AB54bd930",
+         "Linea": "0xC6cE37f0076A00C7E95Af7fC0524d41b551888dd",
+         "Fantom": "0x13425Fd84F38Ee2Bbd26454D01373cae5795254c",
+         "Metis": "0x1a42F38521b53BAcb86622834A6FC1FFae779B2B",
+         "Binance": "0x6d9fCfF60140681559d021a9DdE462985976C412",
+         "Avalanche": "0xb1FCC8D4a25ca186b6329C30F093E5733d244147",
+         "Ethereum": ""
+      },
+      "Harbor": "0x35b7C144f9C0d2A4Ed3b02216051bEc1155ed993",
+      "Ironclad": "0x2dDD3BCA2Fa050532B8d7Fd41fB1449382187dAA",
+      "Yuzu": "0xdDA18A0e624e13536C794F26Fb5acB428bCF32bC",
+      "Aurelius": "0x5C93B799D31d3d6a7C977f75FDB88d069565A55b"
    }
 }
