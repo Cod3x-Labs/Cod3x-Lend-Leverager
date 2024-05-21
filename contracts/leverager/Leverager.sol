@@ -23,6 +23,7 @@ contract Leverager is IFlashLoanReceiver {
     error Leverager__TRANSFER_FAILED();
     error Leverager__INVALID_INITIATOR();
     error Leverager__NATIVE_LEVERAGE_NOT_ACTIVATED();
+    error Leverager__INVALID_FLASHLOAN_CALLER();
 
     constructor(address _addressesProvider, address _weth) {
         if (_addressesProvider == address(0)) revert Leverager__INVALID_INPUT();
@@ -153,6 +154,7 @@ contract Leverager is IFlashLoanReceiver {
         bytes calldata _params
     ) external override returns (bool) {
         if (_initiator != address(this)) revert Leverager__INVALID_INITIATOR();
+        if (msg.sender != address(lendingPool)) revert Leverager__INVALID_FLASHLOAN_CALLER();
 
         (bool isLeveraging, address sender_, uint256 initialDeposit_) 
             = abi.decode(_params, (bool, address, uint256));
