@@ -43,7 +43,6 @@ contract Leverager is IFlashLoanReceiver {
         uint256 _borrowAmount,
         uint256 _minHealthFactor
     ) external payable {
-        if (paused) revert Leverager__PAUSED();
         if (address(weth) == address(0)) revert Leverager__NATIVE_LEVERAGE_NOT_ACTIVATED();
         if (msg.value != 0)
             weth.deposit{value: msg.value}();
@@ -56,14 +55,12 @@ contract Leverager is IFlashLoanReceiver {
         uint256 _borrowAmount,
         uint256 _minHealthFactor
     ) external {
-        if (paused) revert Leverager__PAUSED();
         if (_initialDeposit != 0) 
             IERC20(_asset).safeTransferFrom(msg.sender, address(this), _initialDeposit);
         _leverage(_asset, _initialDeposit, _borrowAmount, _minHealthFactor);
     }
 
     function deleverageNative() external {
-        if (paused) revert Leverager__PAUSED();
         if (address(weth) == address(0)) revert Leverager__NATIVE_LEVERAGE_NOT_ACTIVATED();
         _deleverage(address(weth));
         weth.withdraw(weth.balanceOf(address(this)));
@@ -74,7 +71,6 @@ contract Leverager is IFlashLoanReceiver {
     function deleverageERC20(
         address _asset
     ) external {
-        if (paused) revert Leverager__PAUSED();
         _deleverage(_asset);
         uint256 assetBalance_ = IERC20(_asset).balanceOf(address(this));
         if (assetBalance_ != 0)
