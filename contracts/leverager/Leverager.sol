@@ -8,14 +8,17 @@ import "./interfaces/IWETH.sol";
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 
-contract Leverager is IFlashLoanReceiver {
+contract Leverager is IFlashLoanReceiver, AccessControl {
     using SafeERC20 for IERC20;
 
     IWETH public immutable weth;
     ILendingPool private immutable lendingPool;
     ILendingPoolAddressesProvider private immutable addressesProvider;
     uint256 public constant MIN_HF = 1.05e18;
+    bytes32 private constant PAUSER = keccak256("PAUSER");
+    bytes32 private constant UNPAUSER = keccak256("UNPAUSER");
     bool internal paused;
 
     error Leverager__INVALID_INPUT();
@@ -27,16 +30,12 @@ contract Leverager is IFlashLoanReceiver {
     error Leverager__INVALID_FLASHLOAN_CALLER();
     error Leverager__PAUSED();
 
-    modifier onlyPoolAdmin {
-        require(addressesProvider.getPoolAdmin() == msg.sender, "Caller not pool admin.");
-        _;
-    }
-
     constructor(address _addressesProvider, address _weth) {
         if (_addressesProvider == address(0)) revert Leverager__INVALID_INPUT();
         addressesProvider = ILendingPoolAddressesProvider(_addressesProvider);
         lendingPool = ILendingPool(addressesProvider.getLendingPool());
         weth = IWETH(_weth);
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
     function leverageNative(
@@ -223,7 +222,11 @@ contract Leverager is IFlashLoanReceiver {
         revert('Fallback not allowed');
     }
 
-    function setPause(bool _paused) external onlyPoolAdmin {
-        paused = _paused;
+    function pause() external onlyRole(PAUSER) {
+        paused = true;
+    }
+
+    function unpause() external onlyRole(UNPAUSER) {
+        paused = false;
     }
 }
