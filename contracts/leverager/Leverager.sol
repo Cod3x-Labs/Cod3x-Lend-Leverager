@@ -16,6 +16,7 @@ contract Leverager is IFlashLoanReceiver {
     ILendingPool private immutable lendingPool;
     ILendingPoolAddressesProvider private immutable addressesProvider;
     uint256 public constant MIN_HF = 1.05e18;
+    bool internal paused;
 
     error Leverager__INVALID_INPUT();
     error Leverager__INVALID_HEALTH_FACTOR();
@@ -24,6 +25,12 @@ contract Leverager is IFlashLoanReceiver {
     error Leverager__INVALID_INITIATOR();
     error Leverager__NATIVE_LEVERAGE_NOT_ACTIVATED();
     error Leverager__INVALID_FLASHLOAN_CALLER();
+    error Leverager__PAUSED();
+
+    modifier onlyPoolAdmin {
+        require(addressesProvider.getPoolAdmin() == msg.sender, "Caller not pool admin.");
+        _;
+    }
 
     constructor(address _addressesProvider, address _weth) {
         if (_addressesProvider == address(0)) revert Leverager__INVALID_INPUT();
@@ -86,6 +93,7 @@ contract Leverager is IFlashLoanReceiver {
         uint256 _borrowAmount,
         uint256 _minHealthFactor
     ) internal {
+        if (paused) revert Leverager__PAUSED();
         if (_asset == address(0)) revert Leverager__INVALID_INPUT();
         if (_borrowAmount == 0) revert Leverager__INVALID_INPUT();
         if (_minHealthFactor < MIN_HF) revert Leverager__INVALID_HEALTH_FACTOR();
@@ -122,6 +130,7 @@ contract Leverager is IFlashLoanReceiver {
     function _deleverage(
         address _asset
     ) internal {
+        if (paused) revert Leverager__PAUSED();
         if (_asset == address(0)) revert Leverager__INVALID_INPUT();
 
         address debtToken_ = lendingPool.getReserveData(_asset).variableDebtTokenAddress;
@@ -153,6 +162,7 @@ contract Leverager is IFlashLoanReceiver {
         address _initiator,
         bytes calldata _params
     ) external override returns (bool) {
+        if (paused) revert Leverager__PAUSED();
         if (_initiator != address(this)) revert Leverager__INVALID_INITIATOR();
         if (msg.sender != address(lendingPool)) revert Leverager__INVALID_FLASHLOAN_CALLER();
 
@@ -211,5 +221,9 @@ contract Leverager is IFlashLoanReceiver {
 
     fallback() external payable {
         revert('Fallback not allowed');
+    }
+
+    function setPause(bool _paused) external onlyPoolAdmin {
+        paused = _paused;
     }
 }
