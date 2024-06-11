@@ -59,18 +59,19 @@ contract Leverager is IFlashLoanReceiver, AccessControl {
         _leverage(_asset, _initialDeposit, _borrowAmount, _minHealthFactor);
     }
 
-    function deleverageNative() external {
+    function deleverageNative(uint256 _minHealthFactor) external {
         if (address(weth) == address(0)) revert Leverager__NATIVE_LEVERAGE_NOT_ACTIVATED();
-        _deleverage(address(weth));
+        _deleverage(address(weth), _minHealthFactor);
         weth.withdraw(weth.balanceOf(address(this)));
         (bool success_, ) = payable(msg.sender).call{value: address(this).balance}("");
         if (!success_) revert Leverager__TRANSFER_FAILED();
     }
 
     function deleverageERC20(
-        address _asset
+        address _asset,
+        uint256 _minHealthFactor
     ) external {
-        _deleverage(_asset);
+        _deleverage(_asset, _minHealthFactor);
         uint256 assetBalance_ = IERC20(_asset).balanceOf(address(this));
         if (assetBalance_ != 0)
             IERC20(_asset).safeTransfer(msg.sender, assetBalance_);
@@ -127,10 +128,12 @@ contract Leverager is IFlashLoanReceiver, AccessControl {
      * @param _asset to deleverage
      */
     function _deleverage(
-        address _asset
+        address _asset,
+        uint256 _minHealthFactor
     ) internal {
         if (paused) revert Leverager__PAUSED();
         if (_asset == address(0)) revert Leverager__INVALID_INPUT();
+        if (_minHealthFactor < MIN_HF) revert Leverager__INVALID_HEALTH_FACTOR();
 
         address debtToken_ = lendingPool.getReserveData(_asset).variableDebtTokenAddress;
 
@@ -152,6 +155,9 @@ contract Leverager is IFlashLoanReceiver, AccessControl {
             abi.encode(false, msg.sender, 0),
             0 // referral code
         );
+
+        (,,,,, uint256 healthFactor_) = lendingPool.getUserAccountData(msg.sender);
+        if (healthFactor_ < _minHealthFactor) revert Leverager__INVALID_HEALTH_FACTOR();
     }
 
     function executeOperation(
