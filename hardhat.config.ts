@@ -3,6 +3,7 @@ import "@nomiclabs/hardhat-etherscan";
 import "@nomiclabs/hardhat-waffle";
 import "@typechain/hardhat";
 import "solidity-coverage";
+import "@nomicfoundation/hardhat-foundry";
 // import * as env from './env.json';
 
 const config: HardhatUserConfig = {
