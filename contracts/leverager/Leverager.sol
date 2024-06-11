@@ -19,7 +19,7 @@ contract Leverager is IFlashLoanReceiver, AccessControl {
     uint256 public constant MIN_HF = 1.05e18;
     bytes32 private constant PAUSER = keccak256("PAUSER");
     bytes32 private constant UNPAUSER = keccak256("UNPAUSER");
-    bool internal paused;
+    bool public paused;
 
     error Leverager__INVALID_INPUT();
     error Leverager__INVALID_HEALTH_FACTOR();
