@@ -1,75 +1,238 @@
-// SPDX-License-Identifier: UNLICENSED
-pragma solidity 0.6.12;
-pragma experimental ABIEncoderV2;
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.19;
 
-import "./lib/SafeMath.sol";
-import "./interfaces/IERC20.sol";
 import "./interfaces/ILendingPool.sol";
+import "./interfaces/ILendingPoolAddressesProvider.sol";
+import "./interfaces/IFlashLoanReceiver.sol";
+import "./interfaces/IWETH.sol";
 
-contract Leverager {
-    using SafeMath for uint256;
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 
-    uint256 public constant BORROW_RATIO_DECIMALS = 4;
+contract Leverager is IFlashLoanReceiver, AccessControl {
+    using SafeERC20 for IERC20;
 
-    /// @notice Lending Pool address
-    ILendingPool public lendingPool;
+    IWETH public immutable weth;
+    ILendingPool private immutable lendingPool;
+    ILendingPoolAddressesProvider private immutable addressesProvider;
+    uint256 public constant MIN_HF = 1.05e18;
+    bytes32 private constant PAUSER = keccak256("PAUSER");
+    bytes32 private constant UNPAUSER = keccak256("UNPAUSER");
+    bool public paused;
 
-    constructor(ILendingPool _lendingPool) public {
-        lendingPool = _lendingPool;
+    error Leverager__INVALID_INPUT();
+    error Leverager__INVALID_HEALTH_FACTOR();
+    error Leverager__UNAUTHORIZED_CALLER();
+    error Leverager__TRANSFER_FAILED();
+    error Leverager__INVALID_INITIATOR();
+    error Leverager__NATIVE_LEVERAGE_NOT_ACTIVATED();
+    error Leverager__INVALID_FLASHLOAN_CALLER();
+    error Leverager__PAUSED();
+
+    constructor(address _addressesProvider, address _weth) {
+        if (_addressesProvider == address(0)) revert Leverager__INVALID_INPUT();
+        addressesProvider = ILendingPoolAddressesProvider(_addressesProvider);
+        lendingPool = ILendingPool(addressesProvider.getLendingPool());
+        weth = IWETH(_weth);
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
     }
 
-    /**
-     * @dev Returns the configuration of the reserve
-     * @param asset The address of the underlying asset of the reserve
-     * @return The configuration of the reserve
-     **/
-    function getConfiguration(address asset) external view returns (DataTypes.ReserveConfigurationMap memory) {
-        return lendingPool.getConfiguration(asset);
+    function leverageNative(
+        uint256 _borrowAmount,
+        uint256 _minHealthFactor
+    ) external payable {
+        if (address(weth) == address(0)) revert Leverager__NATIVE_LEVERAGE_NOT_ACTIVATED();
+        if (msg.value != 0)
+            weth.deposit{value: msg.value}();
+        _leverage(address(weth), msg.value, _borrowAmount, _minHealthFactor);
     }
 
-    /**
-     * @dev Returns variable debt token address of asset
-     * @param asset The address of the underlying asset of the reserve
-     * @return varaiableDebtToken address of the asset
-     **/
-    function getVariableDebtToken(address asset) public view returns (address) {
-        DataTypes.ReserveData memory reserveData = lendingPool.getReserveData(asset);
-        return reserveData.variableDebtTokenAddress;
-    }
-
-    /**
-     * @dev Returns loan to value
-     * @param asset The address of the underlying asset of the reserve
-     * @return ltv of the asset
-     **/
-    function ltv(address asset) public view returns (uint256) {
-        DataTypes.ReserveConfigurationMap memory config =  lendingPool.getConfiguration(asset);
-        return config.data % (2 ** 16);
-    }
-
-    /**
-     * @dev Loop the deposit and borrow of an asset
-     * @param asset for loop
-     * @param amount for the initial deposit
-     * @param borrowRatio Ratio of tokens to borrow
-     * @param loopCount Repeat count for loop
-     **/
-    function loop(
-        address asset,
-        uint256 amount,
-        uint256 borrowRatio,
-        uint256 loopCount
+    function leverageERC20(
+        address _asset,
+        uint256 _initialDeposit,
+        uint256 _borrowAmount,
+        uint256 _minHealthFactor
     ) external {
-        require(address(asset) != address(0), 'INVALID_ADDRESS');
-        uint256 interestRateMode = 2;
-        uint16 referralCode = 0;
-        IERC20(asset).transferFrom(msg.sender, address(this), amount);
-        IERC20(asset).approve(address(lendingPool), type(uint256).max);
-        lendingPool.deposit(asset, amount, msg.sender, referralCode);
-        for (uint256 i = 0; i < loopCount; ++i) {
-            amount = amount.mul(borrowRatio).div(10 ** BORROW_RATIO_DECIMALS);
-            lendingPool.borrow(asset, amount, interestRateMode, referralCode, msg.sender);
-            lendingPool.deposit(asset, amount, msg.sender, referralCode);
+        if (_initialDeposit != 0) 
+            IERC20(_asset).safeTransferFrom(msg.sender, address(this), _initialDeposit);
+        _leverage(_asset, _initialDeposit, _borrowAmount, _minHealthFactor);
+    }
+
+    function deleverageNative(uint256 _minHealthFactor) external {
+        if (address(weth) == address(0)) revert Leverager__NATIVE_LEVERAGE_NOT_ACTIVATED();
+        _deleverage(address(weth), _minHealthFactor);
+        weth.withdraw(weth.balanceOf(address(this)));
+        (bool success_, ) = payable(msg.sender).call{value: address(this).balance}("");
+        if (!success_) revert Leverager__TRANSFER_FAILED();
+    }
+
+    function deleverageERC20(
+        address _asset,
+        uint256 _minHealthFactor
+    ) external {
+        _deleverage(_asset, _minHealthFactor);
+        uint256 assetBalance_ = IERC20(_asset).balanceOf(address(this));
+        if (assetBalance_ != 0)
+            IERC20(_asset).safeTransfer(msg.sender, assetBalance_);
+    }
+
+    /**
+     * @notice leverage an asset using flashloan.
+     * @dev Before calling _leverage() users will need to call: 
+     *     - DebtToken.approveDelegation(address(Leverager), _borrowAmount)
+     *     - ERC20(_asset).approve(address(Leverager), _initialDeposit)
+     * @param _asset to leverage
+     * @param _initialDeposit amount to send 
+     * @param _borrowAmount amount to borrow
+     * @param _minHealthFactor minimum hf
+     */
+    function _leverage(
+        address _asset,
+        uint256 _initialDeposit,
+        uint256 _borrowAmount,
+        uint256 _minHealthFactor
+    ) internal {
+        if (paused) revert Leverager__PAUSED();
+        if (_asset == address(0)) revert Leverager__INVALID_INPUT();
+        if (_borrowAmount == 0) revert Leverager__INVALID_INPUT();
+        if (_minHealthFactor < MIN_HF) revert Leverager__INVALID_HEALTH_FACTOR();
+
+        address[] memory assets_ = new address[](1);
+        assets_[0] = _asset;
+
+        uint256[] memory amounts_ = new uint256[](1);
+        amounts_[0] = _borrowAmount;
+
+        uint256[] memory modes_ = new uint256[](1);
+        modes_[0] = 2;
+
+        lendingPool.flashLoan(
+            address(this),
+            assets_, // [_asset]
+            amounts_,// [_borrowAmount]
+            modes_,  // [2] variable debt
+            msg.sender, // onBehalfOf
+            abi.encode(true, msg.sender, _initialDeposit),
+            0 // referral code
+        );
+
+        (,,,,, uint256 healthFactor_) = lendingPool.getUserAccountData(msg.sender);
+        if (healthFactor_ < _minHealthFactor) revert Leverager__INVALID_HEALTH_FACTOR();
+    }
+
+    /**
+     * @notice deleverage an asset using flashloan.
+     * @dev Before calling loop() users will need to call: 
+     *     - ERC20(aToken).approve(address(this), type(uint256).max) 
+     * @param _asset to deleverage
+     */
+    function _deleverage(
+        address _asset,
+        uint256 _minHealthFactor
+    ) internal {
+        if (paused) revert Leverager__PAUSED();
+        if (_asset == address(0)) revert Leverager__INVALID_INPUT();
+        if (_minHealthFactor < MIN_HF) revert Leverager__INVALID_HEALTH_FACTOR();
+
+        address debtToken_ = lendingPool.getReserveData(_asset).variableDebtTokenAddress;
+
+        address[] memory assets_ = new address[](1);
+        assets_[0] = _asset;
+
+        uint256[] memory amounts_ = new uint256[](1);
+        amounts_[0] = IERC20(debtToken_).balanceOf(msg.sender);
+
+        uint256[] memory modes_ = new uint256[](1);
+        modes_[0] = 0;
+
+        lendingPool.flashLoan(
+            address(this),
+            assets_, // [_asset]
+            amounts_,// [_borrowAmount]
+            modes_,  // [0] no debt
+            msg.sender, // onBehalfOf
+            abi.encode(false, msg.sender, 0),
+            0 // referral code
+        );
+
+        (,,,,, uint256 healthFactor_) = lendingPool.getUserAccountData(msg.sender);
+        if (healthFactor_ < _minHealthFactor) revert Leverager__INVALID_HEALTH_FACTOR();
+    }
+
+    function executeOperation(
+        address[] memory _assets,
+        uint256[] memory _amounts,
+        uint256[] memory _premiums,
+        address _initiator,
+        bytes calldata _params
+    ) external override returns (bool) {
+        if (paused) revert Leverager__PAUSED();
+        if (_initiator != address(this)) revert Leverager__INVALID_INITIATOR();
+        if (msg.sender != address(lendingPool)) revert Leverager__INVALID_FLASHLOAN_CALLER();
+
+        (bool isLeveraging, address sender_, uint256 initialDeposit_) 
+            = abi.decode(_params, (bool, address, uint256));
+
+        // leverage
+        if (isLeveraging) {
+            uint256 amountToDeposit_ = initialDeposit_ + _amounts[0];
+            IERC20(_assets[0]).approve(address(lendingPool), amountToDeposit_);
+            lendingPool.deposit(
+                _assets[0],
+                amountToDeposit_,
+                sender_,
+                0
+            );
         }
+        // deleverage
+        else {
+            address aToken_ = lendingPool.getReserveData(_assets[0]).aTokenAddress;
+            IERC20(_assets[0]).approve(address(lendingPool), _amounts[0]);
+            
+            lendingPool.repay(
+                _assets[0],
+                _amounts[0],
+                2, // variable
+                sender_
+            );
+
+            IERC20(aToken_).safeTransferFrom(sender_, address(this), IERC20(aToken_).balanceOf(sender_));
+
+            lendingPool.withdraw(
+                _assets[0],
+                IERC20(aToken_).balanceOf(address(this)),
+                address(this)
+            );
+
+            // repay flashloan
+            IERC20(_assets[0]).approve(address(lendingPool), _amounts[0] + _premiums[0]);
+        }
+
+        return true;
+    }
+
+    function ADDRESSES_PROVIDER() external view returns (ILendingPoolAddressesProvider) {
+        return addressesProvider;
+    }
+
+    function LENDING_POOL() external view returns (ILendingPool) {
+        return lendingPool;
+    }
+
+    receive() external payable {
+        require(msg.sender == address(weth), 'Receive not allowed');
+    }
+
+    fallback() external payable {
+        revert('Fallback not allowed');
+    }
+
+    function pause() external onlyRole(PAUSER) {
+        paused = true;
+    }
+
+    function unpause() external onlyRole(UNPAUSER) {
+        paused = false;
     }
 }
