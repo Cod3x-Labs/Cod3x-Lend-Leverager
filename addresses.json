@@ -1,19 +1,41 @@
 {
    "Leverager": {
       "Granary": {
-         "Optimism": "0x4A7624a74dAAeB3212C3036A55BEAc5e78b6d039",
-         "Arbitrum": "0xf5604a93CaDDb18a4ba8Ee8f3F20324CA286dcAE",
-         "Base": "0xd3eA00cf1592c9D06a62afdE3A2e6b3AB54bd930",
-         "Linea": "0xC6cE37f0076A00C7E95Af7fC0524d41b551888dd",
-         "Fantom": "0x13425Fd84F38Ee2Bbd26454D01373cae5795254c",
-         "Metis": "0x1a42F38521b53BAcb86622834A6FC1FFae779B2B",
-         "Binance": "0x6d9fCfF60140681559d021a9DdE462985976C412",
-         "Avalanche": "0xb1FCC8D4a25ca186b6329C30F093E5733d244147",
-         "Ethereum": ""
+         "Optimism": "0x216CE938a497e989fD44FdDFa1E33f722C6a3207",
+         "Arbitrum": "0x21bA67FAFaD9Bcb7e0AEA9739dbFFFd5Ee72E716",
+         "Base": "0x1958be6b2DabEfF36FF0665149E667717F5E573a",
+         "Linea": "0xfD389Dc9533717239856190F42475d3f263a270d",
+         "Fantom": "0x5Ad12e425300c2a4aE9fE94B9fFAF1D87B82e8f5",
+         "Metis": "N/A",
+         "Binance": "0x8bF797F7D2f84d189C08FC494485974B91a9B9Aa",
+         "Avalanche": "0x7B48Eb52C1314b4eE374315b343cAAE38Ff00E90",
+         "Ethereum": "0xCfcD1A9221434642b221273949361E768431EE13"
       },
-      "Harbor": "0x35b7C144f9C0d2A4Ed3b02216051bEc1155ed993",
-      "Ironclad": "0x2dDD3BCA2Fa050532B8d7Fd41fB1449382187dAA",
-      "Yuzu": "0xdDA18A0e624e13536C794F26Fb5acB428bCF32bC",
-      "Aurelius": "0x5C93B799D31d3d6a7C977f75FDB88d069565A55b"
+      "Harbor": "0x895103307f051e38Bca5113AaC4D53b262C1efb7",
+      "Ironclad": "0x9A6Add057603d3366ac3cA97Fe80126b7f96af05",
+      "Yuzu": "N/A",
+      "Aurelius": "0xEDc83309549e36f3c7FD8c2C5C54B4c8e5FA00FC"
+   },
+   "Admins": {
+      "Granary": {
+         "Optimism": "https://app.safe.global/home?safe=oeth:0xf6fD4c5cb0D2a92fbF8E08E6C2A27Ca7fe39FDCc",
+         "Arbitrum": "https://app.safe.global/home?safe=arb1:0x4F8B86ff37c5Cdb8Df2Bfacd481266Cb91eDd975",
+         "Base": "https://app.safe.global/home?safe=base:0xbdB399dD6F66609303D906D90765E432c04F77a4",
+         "Linea": "https://safe.linea.build/home?safe=linea:0x0d75BD85F718681C55829f8f9170B12A9e2e75Be",
+         "Fantom": "https://safe.fantom.network/home?safe=ftm%3A0x95D3c4ED2D40ac99E726B975611361305784aC65",
+         "Metis": "N/A",
+         "Binance": "https://app.safe.global/home?safe=bnb:0x0bA2504eAd26F10DEC40CF277BB8d5b2338Bae2A",
+         "Avalanche": "https://app.safe.global/home?safe=avax:0x060e95881F4fC62F4146ebe53535267D9fe33dC7",
+         "Ethereum": "https://app.safe.global/home?safe=eth:0xA15AA70706D56aC83491aB90Ea6A3Ec3f47639ab"
+      },
+      "Harbor": "https://app.safe.global/home?safe=bnb:0x6eB1fF8E939aFBF3086329B2b32725b72095512C",
+      "Ironclad": "https://safe.optimism.io/home?safe=mode:0xD4D995787D39D70F35E694dC8306D7dB863234aC",
+      "Yuzu": "N/A",
+      "Aurelius": "https://multisig.mantle.xyz/home?safe=mantle:0xE61d01d25046c45ccDAFA80870339a36fdf07105"
+   },
+   "Roles": {
+      "DEFAULT_ADMIN_ROLE": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "PAUSER": "0x539440820030c4994db4e31b6b800deafd503688728f932addfe7a410515c14c",
+      "UNPAUSER": "0x82b32d9ab5100db08aeb9a0e08b422d14851ec118736590462bf9c085a6e9448"
    }
 }

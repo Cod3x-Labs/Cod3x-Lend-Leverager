@@ -17,8 +17,8 @@ contract Leverager is IFlashLoanReceiver, AccessControl {
     ILendingPool private immutable lendingPool;
     ILendingPoolAddressesProvider private immutable addressesProvider;
     uint256 public constant MIN_HF = 1.05e18;
-    bytes32 private constant PAUSER = keccak256("PAUSER");
-    bytes32 private constant UNPAUSER = keccak256("UNPAUSER");
+    bytes32 public constant PAUSER = keccak256("PAUSER");
+    bytes32 public constant UNPAUSER = keccak256("UNPAUSER");
     bool public paused;
 
     error Leverager__INVALID_INPUT();
