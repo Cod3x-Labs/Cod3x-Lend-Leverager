@@ -14,7 +14,8 @@
       "Harbor": "0x895103307f051e38Bca5113AaC4D53b262C1efb7",
       "Ironclad": "0x9A6Add057603d3366ac3cA97Fe80126b7f96af05",
       "Yuzu": "N/A",
-      "Aurelius": "0xEDc83309549e36f3c7FD8c2C5C54B4c8e5FA00FC"
+      "Aurelius": "0xEDc83309549e36f3c7FD8c2C5C54B4c8e5FA00FC",
+      "Glyph": "0x4fB27Fe225A499f7FD9624419ED401C9757B3e79"
    },
    "Admins": {
       "Granary": {
@@ -31,7 +32,8 @@
       "Harbor": "https://app.safe.global/home?safe=bnb:0x6eB1fF8E939aFBF3086329B2b32725b72095512C",
       "Ironclad": "https://safe.optimism.io/home?safe=mode:0xD4D995787D39D70F35E694dC8306D7dB863234aC",
       "Yuzu": "N/A",
-      "Aurelius": "https://multisig.mantle.xyz/home?safe=mantle:0xE61d01d25046c45ccDAFA80870339a36fdf07105"
+      "Aurelius": "https://multisig.mantle.xyz/home?safe=mantle:0xE61d01d25046c45ccDAFA80870339a36fdf07105",
+      "Glyph": "https://safe.optimism.io/home?safe=fraxtal:0x31d5F11b4db22445bcf1808589CdCc83dc3f7788"
    },
    "Roles": {
       "DEFAULT_ADMIN_ROLE": "0x0000000000000000000000000000000000000000000000000000000000000000",
